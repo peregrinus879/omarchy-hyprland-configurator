@@ -1,0 +1,578 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Omarchy Hyprland Configurator v1.1
+# Complete configuration management for Hyprland
+# Repository: https://github.com/peregrinus879/omarchy-hyprland-configurator
+
+# Configuration
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly CONFIG_DIR="$SCRIPT_DIR/configs"
+readonly TARGET_DIR="$HOME/.config/hypr"
+readonly BACKUP_DIR="$HOME/.config/hypr/backups"
+
+# Configuration files to manage
+readonly -a CONFIG_FILES=(
+  "bindings.conf"
+  "input.conf"
+  "monitors.conf"
+)
+
+# Colors for output
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
+readonly BOLD='\033[1m'
+readonly NC='\033[0m'
+
+# Global flags
+BACKUP_CREATED=false
+INSTALL_ATTEMPTED=false
+
+# Logging functions
+log_info() {
+  echo -e "${BLUE}[INFO]${NC} $*"
+}
+
+log_success() {
+  echo -e "${GREEN}[SUCCESS]${NC} $*"
+}
+
+log_warning() {
+  echo -e "${YELLOW}[WARNING]${NC} $*"
+}
+
+log_error() {
+  echo -e "${RED}[ERROR]${NC} $*"
+}
+
+log_step() {
+  echo -e "\n${CYAN}${BOLD}=== $* ===${NC}"
+}
+
+log_debug() {
+  if [[ "${DEBUG:-}" == "1" ]]; then
+    echo -e "${CYAN}[DEBUG]${NC} $*"
+  fi
+}
+
+# Utility functions
+check_dependencies() {
+  log_debug "Checking for Hyprland..."
+  if command -v hyprctl >/dev/null 2>&1; then
+    log_info "Hyprland detected"
+  else
+    log_warning "Hyprland not found - configs will be installed anyway"
+  fi
+}
+
+ensure_directories() {
+  log_debug "Ensuring directories exist..."
+  local dirs=("$TARGET_DIR" "$BACKUP_DIR")
+
+  for dir in "${dirs[@]}"; do
+    if [[ ! -d "$dir" ]]; then
+      log_info "Creating directory: $dir"
+      if ! mkdir -p "$dir"; then
+        log_error "Failed to create directory: $dir"
+        return 1
+      fi
+    fi
+  done
+  log_debug "All directories exist"
+}
+
+get_backup_timestamp() {
+  date +"%Y%m%d_%H%M%S"
+}
+
+validate_source_files() {
+  log_debug "Validating source configuration files..."
+  local missing_files=()
+
+  # Check if configs directory exists
+  if [[ ! -d "$CONFIG_DIR" ]]; then
+    log_error "configs/ directory not found!"
+    log_error "Make sure you're running this script from the repository root"
+    return 1
+  fi
+
+  # Check each required file
+  for config_file in "${CONFIG_FILES[@]}"; do
+    local source_file="$CONFIG_DIR/$config_file"
+    log_debug "Checking for: $source_file"
+    if [[ ! -f "$source_file" ]]; then
+      missing_files+=("$config_file")
+    fi
+  done
+
+  if [[ ${#missing_files[@]} -gt 0 ]]; then
+    log_error "Missing source configuration files:"
+    for file in "${missing_files[@]}"; do
+      echo "  - configs/$file"
+    done
+    log_error "Please add these files to the configs/ directory"
+    return 1
+  fi
+
+  log_debug "All source files validated"
+  return 0
+}
+
+# Backup functions
+backup_existing_configs() {
+  log_step "Backing Up Existing Configurations"
+
+  local timestamp
+  timestamp=$(get_backup_timestamp)
+  local backup_subdir="$BACKUP_DIR/backup_$timestamp"
+  local backup_count=0
+
+  # Check each file individually
+  for config_file in "${CONFIG_FILES[@]}"; do
+    local target_file="$TARGET_DIR/$config_file"
+    log_debug "Checking target file: $target_file"
+
+    if [[ -f "$target_file" ]]; then
+      # Create backup subdirectory only when needed
+      if [[ $backup_count -eq 0 ]]; then
+        if ! mkdir -p "$backup_subdir"; then
+          log_error "Failed to create backup directory: $backup_subdir"
+          return 1
+        fi
+        log_info "Created backup directory: $backup_subdir"
+      fi
+
+      log_info "Backing up: $config_file"
+      if cp "$target_file" "$backup_subdir/"; then
+        ((backup_count++))
+        log_debug "Successfully backed up: $config_file"
+      else
+        log_error "Failed to backup: $config_file"
+        return 1
+      fi
+    else
+      log_info "No existing file: $config_file (skipping backup)"
+    fi
+  done
+
+  if [[ $backup_count -gt 0 ]]; then
+    log_success "Backed up $backup_count configuration files"
+    echo "  Backup location: $backup_subdir"
+    BACKUP_CREATED=true
+  else
+    log_info "No existing configurations found to backup"
+    # Remove empty backup directory
+    [[ -d "$backup_subdir" ]] && rmdir "$backup_subdir" 2>/dev/null
+  fi
+
+  return 0
+}
+
+# Installation functions
+install_configs() {
+  log_step "Installing Hyprland Configurations"
+  INSTALL_ATTEMPTED=true
+
+  local install_count=0
+
+  # Install each configuration file
+  for config_file in "${CONFIG_FILES[@]}"; do
+    local source_file="$CONFIG_DIR/$config_file"
+    local target_file="$TARGET_DIR/$config_file"
+
+    log_info "Installing: $config_file"
+    log_debug "Source: $source_file"
+    log_debug "Target: $target_file"
+
+    if cp "$source_file" "$target_file"; then
+      ((install_count++))
+      log_debug "Successfully installed: $config_file"
+    else
+      log_error "Failed to install: $config_file"
+      return 1
+    fi
+  done
+
+  log_success "Installed $install_count configuration files"
+  log_info "Configurations installed to: $TARGET_DIR"
+
+  return 0
+}
+
+# Reload function
+reload_hyprland() {
+  log_step "Reloading Hyprland Configuration"
+
+  if command -v hyprctl >/dev/null 2>&1; then
+    log_debug "hyprctl command found"
+    if hyprctl version >/dev/null 2>&1; then
+      log_info "Reloading Hyprland configuration..."
+      if hyprctl reload >/dev/null 2>&1; then
+        log_success "Hyprland configuration reloaded successfully"
+      else
+        log_warning "Failed to reload Hyprland - configuration may need manual restart"
+        log_info "Try: hyprctl reload (manually)"
+      fi
+    else
+      log_warning "Hyprland not running - configuration ready for next start"
+    fi
+  else
+    log_info "Hyprland not installed - configuration files ready"
+  fi
+}
+
+# Status functions
+show_status() {
+  log_step "Hyprland Configuration Status"
+
+  # Check if Hyprland is available
+  if command -v hyprctl >/dev/null 2>&1; then
+    log_success "Hyprland is installed"
+    local version
+    version=$(hyprctl version 2>/dev/null | head -1 || echo "Unknown version")
+    echo "  Version: $version"
+
+    # Check if running
+    if hyprctl version >/dev/null 2>&1; then
+      log_success "Hyprland is running"
+    else
+      log_info "Hyprland is not currently running"
+    fi
+  else
+    log_warning "Hyprland not found"
+  fi
+
+  echo ""
+  log_info "Configuration files status:"
+
+  # Check if configs directory exists
+  if [[ ! -d "$CONFIG_DIR" ]]; then
+    log_error "configs/ directory not found - run from repository root"
+    return 1
+  fi
+
+  for config_file in "${CONFIG_FILES[@]}"; do
+    local source_file="$CONFIG_DIR/$config_file"
+    local target_file="$TARGET_DIR/$config_file"
+
+    echo -n "  $config_file: "
+
+    if [[ ! -f "$source_file" ]]; then
+      echo -e "${RED}Missing source${NC}"
+    elif [[ ! -f "$target_file" ]]; then
+      echo -e "${YELLOW}Not installed${NC}"
+    else
+      # Compare files
+      if cmp -s "$source_file" "$target_file"; then
+        echo -e "${GREEN}✓ Up to date${NC}"
+      else
+        echo -e "${YELLOW}⚠ Different${NC}"
+      fi
+    fi
+  done
+
+  # Show backup information
+  echo ""
+  log_info "Backup information:"
+
+  if [[ -d "$BACKUP_DIR" ]] && [[ -n "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]]; then
+    local backup_count
+    backup_count=$(find "$BACKUP_DIR" -name "backup_*" -type d 2>/dev/null | wc -l)
+    log_success "$backup_count backup(s) available in $BACKUP_DIR"
+
+    # Show most recent backup
+    local latest_backup
+    latest_backup=$(find "$BACKUP_DIR" -name "backup_*" -type d 2>/dev/null | sort | tail -1)
+    if [[ -n "$latest_backup" ]]; then
+      echo "  Latest: $(basename "$latest_backup")"
+    fi
+  else
+    log_info "No backups found"
+  fi
+}
+
+# Restore functions
+list_backups() {
+  log_step "Available Backups"
+
+  if [[ ! -d "$BACKUP_DIR" ]]; then
+    log_info "No backup directory found"
+    return 0
+  fi
+
+  local backups
+  mapfile -t backups < <(find "$BACKUP_DIR" -name "backup_*" -type d 2>/dev/null | sort -r)
+
+  if [[ ${#backups[@]} -eq 0 ]]; then
+    log_info "No backups found"
+    return 0
+  fi
+
+  echo "Available backups (newest first):"
+  for i in "${!backups[@]}"; do
+    local backup_dir="${backups[$i]}"
+    local backup_name
+    backup_name=$(basename "$backup_dir")
+    local backup_date="${backup_name#backup_}"
+
+    # Format date for display
+    local formatted_date
+    formatted_date="${backup_date:0:4}-${backup_date:4:2}-${backup_date:6:2} ${backup_date:9:2}:${backup_date:11:2}:${backup_date:13:2}"
+
+    echo "  $((i + 1)). $backup_name ($formatted_date)"
+
+    # Show what files are in this backup
+    local file_count
+    file_count=$(find "$backup_dir" -name "*.conf" -type f 2>/dev/null | wc -l)
+    echo "     Files: $file_count configuration(s)"
+  done
+}
+
+restore_backup() {
+  local backup_name="$1"
+  local backup_path="$BACKUP_DIR/$backup_name"
+
+  if [[ ! -d "$backup_path" ]]; then
+    log_error "Backup not found: $backup_name"
+    log_info "Use --list-backups to see available backups"
+    return 1
+  fi
+
+  log_step "Restoring Backup: $backup_name"
+
+  # Create a backup of current state before restoring
+  if backup_existing_configs; then
+    log_debug "Current state backed up before restore"
+  else
+    log_warning "Failed to backup current state, continuing with restore..."
+  fi
+
+  local restore_count=0
+  for config_file in "${CONFIG_FILES[@]}"; do
+    local backup_file="$backup_path/$config_file"
+    local target_file="$TARGET_DIR/$config_file"
+
+    if [[ -f "$backup_file" ]]; then
+      log_info "Restoring: $config_file"
+      if cp "$backup_file" "$target_file"; then
+        ((restore_count++))
+        log_debug "Successfully restored: $config_file"
+      else
+        log_error "Failed to restore: $config_file"
+        return 1
+      fi
+    else
+      log_warning "File not found in backup: $config_file"
+    fi
+  done
+
+  log_success "Restored $restore_count configuration files from backup"
+  if [[ "$BACKUP_CREATED" == true ]]; then
+    log_info "Previous configuration backed up before restore"
+  fi
+
+  # Reload Hyprland after restore
+  reload_hyprland
+
+  return 0
+}
+
+# Error handling
+handle_error() {
+  local exit_code=$?
+  log_error "Script failed with exit code: $exit_code"
+
+  if [[ "$INSTALL_ATTEMPTED" == true && "$BACKUP_CREATED" == true ]]; then
+    log_info "A backup was created before attempting installation"
+    log_info "Use --list-backups and --restore to recover if needed"
+  fi
+
+  exit $exit_code
+}
+
+# Trap errors
+trap handle_error ERR
+
+# Main command implementations
+cmd_setup() {
+  log_step "Setting Up Omarchy Hyprland Configurations"
+
+  # Pre-flight checks
+  log_debug "Running pre-flight checks..."
+  if ! validate_source_files; then
+    log_error "Pre-flight validation failed"
+    return 1
+  fi
+
+  check_dependencies
+
+  if ! ensure_directories; then
+    log_error "Failed to create necessary directories"
+    return 1
+  fi
+
+  # Backup existing configs (always succeeds)
+  if ! backup_existing_configs; then
+    log_error "Backup failed - aborting to prevent data loss"
+    return 1
+  fi
+
+  # Install new configs
+  if ! install_configs; then
+    log_error "Installation failed"
+    return 1
+  fi
+
+  # Reload Hyprland (best effort)
+  reload_hyprland
+
+  log_success "Setup complete!"
+  echo ""
+  log_info "Your Hyprland configurations have been installed"
+  log_info "Use '$0 --status' to verify installation"
+
+  return 0
+}
+
+cmd_install() {
+  cmd_setup
+}
+
+cmd_status() {
+  show_status
+}
+
+cmd_backup() {
+  log_step "Creating Manual Backup"
+
+  if ! ensure_directories; then
+    return 1
+  fi
+
+  if backup_existing_configs; then
+    log_success "Manual backup complete!"
+  else
+    log_error "Manual backup failed!"
+    return 1
+  fi
+}
+
+cmd_list_backups() {
+  list_backups
+}
+
+cmd_restore() {
+  local backup_name="${1:-}"
+
+  if [[ -z "$backup_name" ]]; then
+    log_error "Backup name required"
+    echo ""
+    echo "Usage: $0 --restore <backup_name>"
+    echo ""
+    cmd_list_backups
+    return 1
+  fi
+
+  if restore_backup "$backup_name"; then
+    log_success "Restore complete!"
+    log_info "Configuration changes are now active"
+  else
+    log_error "Restore failed!"
+    return 1
+  fi
+}
+
+cmd_update() {
+  log_step "Updating Configurations"
+
+  log_info "This will update your installed configs with the latest from this repository"
+  echo ""
+  read -p "Continue with update? (y/N): " confirm
+
+  if [[ ! $confirm =~ ^[Yy]$ ]]; then
+    log_info "Update cancelled"
+    return 0
+  fi
+
+  cmd_setup
+}
+
+show_usage() {
+  echo -e "${BOLD}Omarchy Hyprland Configurator v1.1${NC}"
+  echo "Complete configuration management for Hyprland"
+  echo ""
+  echo -e "${BOLD}USAGE:${NC}"
+  echo "  $0 [COMMAND]"
+  echo ""
+  echo -e "${BOLD}SETUP:${NC}"
+  echo "  --setup           Complete setup (recommended)"
+  echo "  --install         Install configurations (same as --setup)"
+  echo "  --update          Update existing configurations"
+  echo ""
+  echo -e "${BOLD}MANAGEMENT:${NC}"
+  echo "  --status          Show configuration status"
+  echo "  --backup          Create manual backup"
+  echo "  --list-backups    List available backups"
+  echo "  --restore <name>  Restore from backup"
+  echo ""
+  echo -e "${BOLD}HELP:${NC}"
+  echo "  --help            Show this help message"
+  echo ""
+  echo -e "${BOLD}EXAMPLES:${NC}"
+  echo "  $0 --setup                      # Complete setup"
+  echo "  $0 --status                     # Check status"
+  echo "  $0 --restore backup_20241218_143022  # Restore specific backup"
+  echo ""
+  echo -e "${BOLD}CONFIGURATION FILES:${NC}"
+  for config_file in "${CONFIG_FILES[@]}"; do
+    echo "  • ~/.config/hypr/$config_file"
+  done
+  echo ""
+  echo -e "${BOLD}DEBUG:${NC}"
+  echo "  DEBUG=1 $0 --setup              # Run with debug output"
+}
+
+# Main function
+main() {
+  # Enable debug mode if requested
+  if [[ "${DEBUG:-}" == "1" ]]; then
+    log_debug "Debug mode enabled"
+    set -x
+  fi
+
+  case "${1:-}" in
+  --setup | --install)
+    cmd_setup
+    ;;
+  --status)
+    cmd_status
+    ;;
+  --backup)
+    cmd_backup
+    ;;
+  --list-backups)
+    cmd_list_backups
+    ;;
+  --restore)
+    cmd_restore "${2:-}"
+    ;;
+  --update)
+    cmd_update
+    ;;
+  --help | -h | "")
+    show_usage
+    ;;
+  *)
+    log_error "Unknown command: $1"
+    echo ""
+    show_usage
+    return 1
+    ;;
+  esac
+}
+
+# Execute main function
+main "$@"
