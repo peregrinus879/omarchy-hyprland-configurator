@@ -1,245 +1,233 @@
 # Omarchy Hyprland Configurator
 
-**Complete Hyprland configuration management with automatic backups.**
-
-One script handles everything from validation to installation with robust error handling.
+**Dynamic Hyprland configuration management with automatic backups and zero maintenance.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-1.0-brightgreen.svg)](https://github.com/YOUR_USERNAME/omarchy-hyprland-configurator)
+[![Version](https://img.shields.io/badge/version-2.0-brightgreen.svg)](https://github.com/peregrinus879/omarchy-hyprland-configurator)
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 # Clone and run
-git clone https://github.com/YOUR_USERNAME/omarchy-hyprland-configurator.git
+git clone https://github.com/peregrinus879/omarchy-hyprland-configurator.git
 cd omarchy-hyprland-configurator
 chmod +x omarchy-hyprland-config
 
-# Complete setup (robust)
+# Complete setup (automatic file discovery)
 ./omarchy-hyprland-config --setup
 ```
 
-## What It Does
+## ✨ What's New in v2.0
 
-🔧 **Complete Setup**
-- **Validates everything FIRST** (never gets stuck or fails silently)
-- Installs optimized Hyprland configurations (`bindings.conf`, `input.conf`, `monitors.conf`)
-- **Creates backups FIRST** (never loses your existing settings)
-- Handles errors gracefully - essential validation prevents all failures
+### **Dynamic File Discovery**
+- **No configuration needed!** Automatically discovers ALL files in `configs/` directory
+- **Zero maintenance** - Add new config files anytime without editing the script
+- **Future-proof** - Works with any Hyprland configuration structure
+- **Smart backups** - Only backs up files that exist in your system
 
-⚡ **Automatic Management**  
-- Pre-flight validation ensures clean installation
-- Safe installation with timestamped backups
+## 🎯 What It Does
+
+### **Automatic Everything**
+- **Discovers** all configuration files in `configs/` directory automatically
+- **Validates** source files before making any changes
+- **Backs up** existing configurations with timestamps
+- **Installs** all discovered configurations to `~/.config/hypr/`
+- **Reloads** Hyprland to apply changes immediately
+
+### **Intelligent Management**  
+- Dynamic file discovery - no hardcoded file lists
 - Compare repository vs installed configurations
 - Restore any previous configuration instantly
 - Debug mode shows exactly what's happening
+- Handles any number of config files automatically
 
-🛡️ **Error-Resilient**
+### **Error-Resilient**
 - Comprehensive error handling with detailed feedback
-- Debug mode for troubleshooting (`DEBUG=1`)
+- Pre-flight validation prevents failures
 - State tracking prevents partial installations
 - Never fails silently - always shows what went wrong
 - Recovery guidance for any issues
 
-## Commands
+## 📁 How It Works
+
+Simply add ANY Hyprland configuration files to the `configs/` directory:
+
+```
+omarchy-hyprland-configurator/
+├── omarchy-hyprland-config    # The script (v2.0)
+├── configs/
+│   ├── bindings.conf         # Your key bindings
+│   ├── input.conf            # Input device settings
+│   ├── monitors.conf         # Monitor configurations
+│   ├── animations.conf       # Add any file - automatically handled!
+│   ├── windowrules.conf      # No script changes needed!
+│   └── [any_config].conf     # Literally ANY config file works!
+└── README.md                 # This documentation
+```
+
+**That's it!** The script automatically discovers and manages ALL files in `configs/`.
+
+## 🛠️ Commands
 
 ```bash
-./omarchy-hyprland-config --setup         # Complete robust setup
-./omarchy-hyprland-config --status        # Check configuration status
+./omarchy-hyprland-config --setup         # Complete setup with auto-discovery
+./omarchy-hyprland-config --status        # Check all configuration status
 ./omarchy-hyprland-config --backup        # Create manual backup
 ./omarchy-hyprland-config --list-backups  # List available backups
-./omarchy-hyprland-config --restore <n>   # Restore from backup
+./omarchy-hyprland-config --restore <name># Restore from backup
 ./omarchy-hyprland-config --update        # Update configurations
 ./omarchy-hyprland-config --help          # Show all commands
 
-# Debug mode (shows exactly what happens)
+# Debug mode (see everything)
 DEBUG=1 ./omarchy-hyprland-config --setup
 ```
 
-## Setup Process
+## 🔄 Workflow Examples
 
-### For New Systems
-1. **Clone and setup**: `./omarchy-hyprland-config --setup`
-   - ✅ **Validates source files exist** (prevents all common failures)
-   - ✅ **Creates backup of existing configurations** (never loses settings)
-   - ✅ **Installs optimized configurations** (professional setup)
-   - ✅ **Reloads Hyprland automatically** (changes active immediately)
-   
-2. **Enjoy your optimized setup**: 
-   - Professional key bindings for window management
-   - Optimized input device settings
-   - Multi-monitor configurations ready
-   - Everything backed up and restorable
-   
-3. **Done!** Your Hyprland is now optimized and reliable
-
-### For New PCs/Laptops
+### Adding New Configuration Files
 ```bash
-git clone https://github.com/YOUR_USERNAME/omarchy-hyprland-configurator.git
-cd omarchy-hyprland-configurator
-./omarchy-hyprland-config --setup
-# Setup complete! Configurations active immediately
+# 1. Add any new config to configs/
+echo "# My custom config" > configs/custom.conf
+
+# 2. Check status - automatically detected!
+./omarchy-hyprland-config --status
+# Shows: custom.conf: Not installed
+
+# 3. Install it
+./omarchy-hyprland-config --update
+# Done! No script editing needed!
 ```
 
-## Features
+### Setting Up a New System
+```bash
+# Clone your configs
+git clone https://github.com/YOUR_USERNAME/omarchy-hyprland-configurator.git
+cd omarchy-hyprland-configurator
 
-✅ **Complete Setup** - Pre-flight validation prevents all common failures  
-✅ **Error-Resilient** - Never fails silently, always shows what went wrong  
-✅ **Debug Mode** - See exactly what the script is doing step-by-step  
-✅ **Instant Backup** - Timestamped backups before any changes  
-✅ **State Tracking** - Knows what operations succeeded/failed  
-✅ **Auto-Reload** - Hyprland configuration reloaded automatically  
-✅ **Comprehensive Validation** - Checks everything before making changes  
-✅ **User-Friendly** - Clear instructions and colored output with debug info  
-✅ **Smart Recovery** - Detailed guidance when things go wrong  
+# One command setup - handles any configs in the directory
+./omarchy-hyprland-config --setup
+```
 
-## Robust Design
+### Managing Multiple Configs
+```bash
+# Add 10 new config files to configs/
+# Add 50 new config files to configs/
+# Add ANY number of files...
 
-### Setup Flow (v1.0)
-1. **Pre-flight validation** (checks all source files exist - prevents failures)
-2. **Check dependencies** (verifies Hyprland installation)
-3. **Create directories** (ensures proper structure)
-4. **Backup existing configs FIRST** (ensures complete safety)
-5. **Install configurations** (copies optimized settings)
-6. **Reload Hyprland** (applies changes immediately)
+# Script handles them all automatically!
+./omarchy-hyprland-config --setup
+```
 
-### Error Handling
-- Setup never proceeds without validation - prevents all common failures
-- Debug mode shows exact operations and file paths
-- Clear error messages with specific recovery instructions
-- State tracking prevents partial installations
-- Smart status reporting based on actual system state
-- Automatic Hyprland reload with graceful fallback
+## 🎨 Features
+
+✅ **Dynamic Discovery** - Automatically finds all configs in `configs/` directory  
+✅ **Zero Configuration** - No script editing ever needed  
+✅ **Smart Backups** - Only backs up files that exist  
+✅ **Flexible Restore** - Restores exactly what was backed up  
+✅ **Debug Mode** - See detailed operations step-by-step  
+✅ **State Tracking** - Knows what succeeded/failed  
+✅ **Auto-Reload** - Applies changes immediately  
+✅ **Universal** - Works with any Hyprland setup  
+✅ **Future-Proof** - Adapts to any configuration structure  
+
+## 🏗️ Technical Details
+
+### Architecture (v2.0)
+- **Dynamic file discovery** via `get_config_files()` function
+- **No hardcoded file lists** - completely flexible
+- **Automatic adaptation** to configs directory contents
+- **Smart backup system** - backs up only existing files
+- **Comprehensive validation** before any changes
+
+### File Management
+- **Source**: `configs/` directory (repository)
+- **Target**: `~/.config/hypr/` (system)
+- **Backups**: `~/.config/hypr/backups/backup_YYYYMMDD_HHMMSS/`
+- **Discovery**: Finds all non-hidden files in `configs/`
+- **Installation**: Copies all discovered files to target
 
 ### Debug Mode
 ```bash
-# See exactly what the script is doing
 DEBUG=1 ./omarchy-hyprland-config --setup
 
 # Shows:
-# - File path validation
+# - Files being discovered
+# - Validation steps
 # - Backup operations
-# - Installation steps
-# - Error details
+# - Installation progress
+# - Detailed error information
 ```
 
-## Requirements
+## 🔧 Requirements
 
-- **Hyprland** window manager (or configs ready for when installed)
-- **Bash** shell (for the management script)
-- **Standard Unix tools** (cp, find, cmp)
-- **Repository structure** with `configs/` directory containing your files
+- **Bash** shell (for the script)
+- **Hyprland** (optional - configs work when installed later)
+- **Standard Unix tools** (cp, find, mkdir)
+- **Git** (for cloning the repository)
 
-## Technical Details
+## 🚦 Troubleshooting
 
-### Configuration Files Managed
-- `~/.config/hypr/bindings.conf` - Professional key bindings and shortcuts
-- `~/.config/hypr/input.conf` - Input device settings (mouse, keyboard, touchpad)  
-- `~/.config/hypr/monitors.conf` - Monitor setup and multi-display configuration
-
-### Integration
-- Source directory: `configs/` (in repository)
-- Backup directory: `~/.config/hypr/backups/`
-- Timestamped backups: `backup_YYYYMMDD_HHMMSS/`
-- Automatic Hyprland reload via `hyprctl reload`
-- File comparison for update detection
-- Debug logging for troubleshooting
-
-### Version History
-- **v1.0** - Initial release with pre-flight validation and comprehensive error handling
-
-## Troubleshooting
-
-### Check Status
+### See What's Happening
 ```bash
+# Check current status
 ./omarchy-hyprland-config --status
-```
 
-### Debug Mode (See Everything)
-```bash
+# Run with debug output
 DEBUG=1 ./omarchy-hyprland-config --setup
 ```
 
-### Create Manual Backup
+### Backup and Restore
 ```bash
+# Manual backup
 ./omarchy-hyprland-config --backup
-```
 
-### List All Backups
-```bash
-./omarchy-hyprland-config --list-backups
-```
-
-### Restore Previous Configuration
-```bash
-# See available backups
+# List all backups
 ./omarchy-hyprland-config --list-backups
 
 # Restore specific backup
 ./omarchy-hyprland-config --restore backup_20241218_143022
 ```
 
-### Common Issues
+### Common Solutions
 
-**Pre-flight validation fails**: Missing files in `configs/` directory - add them first
+| Issue | Solution |
+|-------|----------|
+| No files found | Add config files to `configs/` directory |
+| Permission denied | Run `chmod +x omarchy-hyprland-config` |
+| Hyprland not reloading | Manual reload: `hyprctl reload` |
+| Need to see operations | Use `DEBUG=1` mode |
 
-**Backup directory issues**: Script creates directories automatically with proper permissions
+## 📝 Version History
 
-**Configuration not applying**: Hyprland reloads automatically, but manual restart may help
+- **v2.0** (2024-09-22)
+  - Complete rewrite with dynamic file discovery
+  - Removed hardcoded file lists
+  - Automatic adaptation to any config structure
+  - Enhanced debug output
+  - Smart backup/restore system
 
-**Script behavior unclear**: Use `DEBUG=1` mode to see exactly what's happening
+- **v1.1** (Previous)
+  - Robust error handling
+  - Pre-flight validation
+  - Static file list management
 
-## Configuration Details
-
-### Bindings (`bindings.conf`)
-- Professional window management shortcuts
-- Application launchers and workspace controls
-- System controls (volume, brightness, etc.)
-- Optimized workflow enhancements
-
-### Input (`input.conf`)  
-- Mouse sensitivity and acceleration
-- Keyboard layout and repeat settings
-- Touchpad gestures and scrolling
-- Natural input behavior
-
-### Monitors (`monitors.conf`)
-- Multi-monitor setup optimization
-- Resolution and refresh rate settings
-- Positioning and orientation
-- Workspace assignments
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your configuration improvements
-4. Test thoroughly with debug mode
-5. Submit a pull request
+2. Add your configs to `configs/` directory
+3. Test with debug mode: `DEBUG=1 ./omarchy-hyprland-config --setup`
+4. Submit a pull request
 
-## Repository Structure
-
-```
-omarchy-hyprland-configurator/
-├── omarchy-hyprland-config    # The reliable solution
-├── configs/
-│   ├── bindings.conf         # Professional key bindings
-│   ├── input.conf            # Input device settings
-│   └── monitors.conf         # Monitor configurations
-└── README.md                 # This documentation
-```
-
-## License
+## 📄 License
 
 MIT License - Feel free to use, modify, and distribute.
 
-## Support
+## 💬 Support
 
-- **Issues**: Use GitHub Issues for bug reports (include debug output)
-- **Discussions**: Use GitHub Discussions for questions
-- **Documentation**: This README covers all functionality
-- **Debug**: Always try `DEBUG=1` mode first for troubleshooting
+- **Issues**: [GitHub Issues](https://github.com/peregrinus879/omarchy-hyprland-configurator/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/peregrinus879/omarchy-hyprland-configurator/discussions)
+- **Debug**: Always try `DEBUG=1` mode first
 
 ---
 
-**Hyprland configuration should be simple and reliable. This tool makes it so.**
+**Hyprland configuration management that just works.** No maintenance. No hassle. Just add files and go. 🚀

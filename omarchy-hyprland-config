@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Omarchy Hyprland Configurator v1.1
-# Complete configuration management for Hyprland
+# Omarchy Hyprland Configurator v2.0
+# Complete configuration management for Hyprland with dynamic file discovery
 # Repository: https://github.com/peregrinus879/omarchy-hyprland-configurator
 
 # Configuration
@@ -10,13 +10,6 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly CONFIG_DIR="$SCRIPT_DIR/configs"
 readonly TARGET_DIR="$HOME/.config/hypr"
 readonly BACKUP_DIR="$HOME/.config/hypr/backups"
-
-# Configuration files to manage
-readonly -a CONFIG_FILES=(
-  "bindings.conf"
-  "input.conf"
-  "monitors.conf"
-)
 
 # Colors for output
 readonly RED='\033[0;31m'
@@ -58,6 +51,28 @@ log_debug() {
   fi
 }
 
+# Dynamic file discovery function
+get_config_files() {
+  local files=()
+
+  if [[ ! -d "$CONFIG_DIR" ]]; then
+    log_debug "Config directory not found: $CONFIG_DIR"
+    return 1
+  fi
+
+  # Find all files in the configs directory (excluding hidden files and directories)
+  while IFS= read -r -d '' file; do
+    # Get just the filename without the path
+    local filename
+    filename=$(basename "$file")
+    files+=("$filename")
+    log_debug "Found config file: $filename"
+  done < <(find "$CONFIG_DIR" -maxdepth 1 -type f ! -name ".*" -print0 | sort -z)
+
+  # Return the array
+  printf '%s\n' "${files[@]}"
+}
+
 # Utility functions
 check_dependencies() {
   log_debug "Checking for Hyprland..."
@@ -90,7 +105,6 @@ get_backup_timestamp() {
 
 validate_source_files() {
   log_debug "Validating source configuration files..."
-  local missing_files=()
 
   # Check if configs directory exists
   if [[ ! -d "$CONFIG_DIR" ]]; then
@@ -99,25 +113,21 @@ validate_source_files() {
     return 1
   fi
 
-  # Check each required file
-  for config_file in "${CONFIG_FILES[@]}"; do
-    local source_file="$CONFIG_DIR/$config_file"
-    log_debug "Checking for: $source_file"
-    if [[ ! -f "$source_file" ]]; then
-      missing_files+=("$config_file")
-    fi
-  done
+  # Get dynamic list of config files
+  local config_files
+  mapfile -t config_files < <(get_config_files)
 
-  if [[ ${#missing_files[@]} -gt 0 ]]; then
-    log_error "Missing source configuration files:"
-    for file in "${missing_files[@]}"; do
-      echo "  - configs/$file"
-    done
-    log_error "Please add these files to the configs/ directory"
+  if [[ ${#config_files[@]} -eq 0 ]]; then
+    log_error "No configuration files found in configs/ directory"
+    log_info "Add your Hyprland configuration files to: $CONFIG_DIR"
     return 1
   fi
 
-  log_debug "All source files validated"
+  log_debug "Found ${#config_files[@]} configuration file(s) to manage:"
+  for file in "${config_files[@]}"; do
+    log_debug "  - $file"
+  done
+
   return 0
 }
 
@@ -125,13 +135,22 @@ validate_source_files() {
 backup_existing_configs() {
   log_step "Backing Up Existing Configurations"
 
+  # Get dynamic list of config files
+  local config_files
+  mapfile -t config_files < <(get_config_files)
+
+  if [[ ${#config_files[@]} -eq 0 ]]; then
+    log_warning "No configuration files found in configs/ directory"
+    return 0
+  fi
+
   local timestamp
   timestamp=$(get_backup_timestamp)
   local backup_subdir="$BACKUP_DIR/backup_$timestamp"
   local backup_count=0
 
   # Check each file individually
-  for config_file in "${CONFIG_FILES[@]}"; do
+  for config_file in "${config_files[@]}"; do
     local target_file="$TARGET_DIR/$config_file"
     log_debug "Checking target file: $target_file"
 
@@ -159,13 +178,13 @@ backup_existing_configs() {
   done
 
   if [[ $backup_count -gt 0 ]]; then
-    log_success "Backed up $backup_count configuration files"
+    log_success "Backed up $backup_count configuration file(s)"
     echo "  Backup location: $backup_subdir"
     BACKUP_CREATED=true
   else
     log_info "No existing configurations found to backup"
-    # Remove empty backup directory
-    [[ -d "$backup_subdir" ]] && rmdir "$backup_subdir" 2>/dev/null
+    # Remove empty backup directory if it was created
+    [[ -d "$backup_subdir" ]] && rmdir "$backup_subdir" 2>/dev/null || true
   fi
 
   return 0
@@ -176,10 +195,21 @@ install_configs() {
   log_step "Installing Hyprland Configurations"
   INSTALL_ATTEMPTED=true
 
+  # Get dynamic list of config files
+  local config_files
+  mapfile -t config_files < <(get_config_files)
+
+  if [[ ${#config_files[@]} -eq 0 ]]; then
+    log_error "No configuration files found in configs/ directory"
+    return 1
+  fi
+
   local install_count=0
 
+  log_info "Installing ${#config_files[@]} configuration file(s)..."
+
   # Install each configuration file
-  for config_file in "${CONFIG_FILES[@]}"; do
+  for config_file in "${config_files[@]}"; do
     local source_file="$CONFIG_DIR/$config_file"
     local target_file="$TARGET_DIR/$config_file"
 
@@ -196,7 +226,7 @@ install_configs() {
     fi
   done
 
-  log_success "Installed $install_count configuration files"
+  log_success "Installed $install_count configuration file(s)"
   log_info "Configurations installed to: $TARGET_DIR"
 
   return 0
@@ -254,7 +284,20 @@ show_status() {
     return 1
   fi
 
-  for config_file in "${CONFIG_FILES[@]}"; do
+  # Get dynamic list of config files
+  local config_files
+  mapfile -t config_files < <(get_config_files)
+
+  if [[ ${#config_files[@]} -eq 0 ]]; then
+    log_warning "No configuration files found in configs/ directory"
+    echo "  Add files to: $CONFIG_DIR"
+    return 0
+  fi
+
+  echo "  Managing ${#config_files[@]} configuration file(s):"
+  echo ""
+
+  for config_file in "${config_files[@]}"; do
     local source_file="$CONFIG_DIR/$config_file"
     local target_file="$TARGET_DIR/$config_file"
 
@@ -288,6 +331,10 @@ show_status() {
     latest_backup=$(find "$BACKUP_DIR" -name "backup_*" -type d 2>/dev/null | sort | tail -1)
     if [[ -n "$latest_backup" ]]; then
       echo "  Latest: $(basename "$latest_backup")"
+      # Show file count in latest backup
+      local file_count
+      file_count=$(find "$latest_backup" -type f 2>/dev/null | wc -l)
+      echo "  Files in latest: $file_count"
     fi
   else
     log_info "No backups found"
@@ -326,8 +373,15 @@ list_backups() {
 
     # Show what files are in this backup
     local file_count
-    file_count=$(find "$backup_dir" -name "*.conf" -type f 2>/dev/null | wc -l)
+    file_count=$(find "$backup_dir" -type f 2>/dev/null | wc -l)
     echo "     Files: $file_count configuration(s)"
+
+    # List actual files in backup if in debug mode
+    if [[ "${DEBUG:-}" == "1" ]]; then
+      while IFS= read -r file; do
+        echo "       - $(basename "$file")"
+      done < <(find "$backup_dir" -type f 2>/dev/null | sort)
+    fi
   done
 }
 
@@ -350,8 +404,19 @@ restore_backup() {
     log_warning "Failed to backup current state, continuing with restore..."
   fi
 
+  # Get list of files in the backup
+  local backup_files
+  mapfile -t backup_files < <(find "$backup_path" -type f -printf "%f\n" 2>/dev/null | sort)
+
+  if [[ ${#backup_files[@]} -eq 0 ]]; then
+    log_error "No files found in backup"
+    return 1
+  fi
+
+  log_info "Found ${#backup_files[@]} file(s) in backup"
+
   local restore_count=0
-  for config_file in "${CONFIG_FILES[@]}"; do
+  for config_file in "${backup_files[@]}"; do
     local backup_file="$backup_path/$config_file"
     local target_file="$TARGET_DIR/$config_file"
 
@@ -369,7 +434,7 @@ restore_backup() {
     fi
   done
 
-  log_success "Restored $restore_count configuration files from backup"
+  log_success "Restored $restore_count configuration file(s) from backup"
   if [[ "$BACKUP_CREATED" == true ]]; then
     log_info "Previous configuration backed up before restore"
   fi
@@ -490,6 +555,19 @@ cmd_update() {
 
   log_info "This will update your installed configs with the latest from this repository"
   echo ""
+
+  # Show what files will be updated
+  local config_files
+  mapfile -t config_files < <(get_config_files)
+
+  if [[ ${#config_files[@]} -gt 0 ]]; then
+    log_info "Files to be updated:"
+    for file in "${config_files[@]}"; do
+      echo "  - $file"
+    done
+    echo ""
+  fi
+
   read -p "Continue with update? (y/N): " confirm
 
   if [[ ! $confirm =~ ^[Yy]$ ]]; then
@@ -501,8 +579,8 @@ cmd_update() {
 }
 
 show_usage() {
-  echo -e "${BOLD}Omarchy Hyprland Configurator v1.1${NC}"
-  echo "Complete configuration management for Hyprland"
+  echo -e "${BOLD}Omarchy Hyprland Configurator v2.0${NC}"
+  echo "Complete configuration management for Hyprland with dynamic file discovery"
   echo ""
   echo -e "${BOLD}USAGE:${NC}"
   echo "  $0 [COMMAND]"
@@ -526,11 +604,29 @@ show_usage() {
   echo "  $0 --status                     # Check status"
   echo "  $0 --restore backup_20241218_143022  # Restore specific backup"
   echo ""
-  echo -e "${BOLD}CONFIGURATION FILES:${NC}"
-  for config_file in "${CONFIG_FILES[@]}"; do
-    echo "  • ~/.config/hypr/$config_file"
-  done
+  echo -e "${BOLD}DYNAMIC FILE MANAGEMENT:${NC}"
+  echo "  • Automatically discovers all files in configs/ directory"
+  echo "  • No script modification needed when adding new config files"
+  echo "  • Simply add files to configs/ and run --setup or --update"
   echo ""
+  echo -e "${BOLD}CONFIGURATION DIRECTORY:${NC}"
+  echo "  Source: $CONFIG_DIR"
+  echo "  Target: $TARGET_DIR"
+  echo ""
+
+  # Show current files if available
+  if [[ -d "$CONFIG_DIR" ]]; then
+    local config_files
+    mapfile -t config_files < <(get_config_files)
+    if [[ ${#config_files[@]} -gt 0 ]]; then
+      echo -e "${BOLD}CURRENT CONFIGURATION FILES:${NC}"
+      for config_file in "${config_files[@]}"; do
+        echo "  • $config_file"
+      done
+      echo ""
+    fi
+  fi
+
   echo -e "${BOLD}DEBUG:${NC}"
   echo "  DEBUG=1 $0 --setup              # Run with debug output"
 }
@@ -540,6 +636,9 @@ main() {
   # Enable debug mode if requested
   if [[ "${DEBUG:-}" == "1" ]]; then
     log_debug "Debug mode enabled"
+    log_debug "Script version: 2.0"
+    log_debug "Config directory: $CONFIG_DIR"
+    log_debug "Target directory: $TARGET_DIR"
     set -x
   fi
 
