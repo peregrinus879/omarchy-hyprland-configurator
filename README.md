@@ -1,21 +1,58 @@
 # Omarchy Hyprland Configurator
 
-**Dynamic Hyprland configuration management with automatic backups and zero maintenance.**
+**Dynamic Hyprland configuration management with symlink support for live editing.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.0-brightgreen.svg)](https://github.com/peregrinus879/omarchy-hyprland-configurator)
+[![Version](https://img.shields.io/badge/version-2.1-brightgreen.svg)](https://github.com/peregrinus879/omarchy-hyprland-configurator)
 
 ## 🚀 Quick Start
 
 ```bash
-# Clone and run
+# Clone the repository
 git clone https://github.com/peregrinus879/omarchy-hyprland-configurator.git
 cd omarchy-hyprland-configurator
-chmod +x omarchy-hyprland-config
 
-# Complete setup (automatic file discovery)
+# IMPORTANT: Replace configs/ with YOUR configurations
+rm -rf configs/*
+cp ~/.config/hypr/*.conf configs/  # Or add your custom configs
+
+# Run the configurator
+chmod +x omarchy-hyprland-config
 ./omarchy-hyprland-config --setup
+
+# Enable live editing with symlinks (recommended!)
+./omarchy-hyprland-config --link
 ```
+
+## ⚠️ Important Note
+
+This script is designed for **general use** - it will work with ANY Hyprland configuration files. However, the configs in this repository are **my personal Omarchy Hyprland configurations** tailored to my specific setup and preferences.
+
+**Before using:**
+1. Download the script
+2. **Replace** the `configs/` directory contents with YOUR OWN configuration files
+3. Run the configurator to manage your configs
+
+The beauty of v2.0's dynamic discovery is that it works with ANY configuration structure - just add your files and go!
+
+## ✨ What's New in v2.1
+
+### **Symlink Support for Live Editing**
+- **`--link` command** creates symlinks instead of copies
+- Edit configs anywhere - changes are instant
+- No more copying files back and forth
+- Perfect for frequent config tweaking
+
+### **Enhanced Sync Features**  
+- **`--sync` command** for two-way synchronization
+- Pull changes from system or push to system
+- Show differences between repo and installed configs
+- Works with both copies and symlinks
+
+### **Better Status Display**
+- Shows whether files are copied or symlinked
+- Visual indicators: ✓ (copied), ↔ (symlinked), ⚠ (different)
+- Summary of file states
 
 ## ✨ What's New in v2.0
 
@@ -54,14 +91,12 @@ Simply add ANY Hyprland configuration files to the `configs/` directory:
 
 ```
 omarchy-hyprland-configurator/
-├── omarchy-hyprland-config    # The script (v2.0)
-├── configs/
-│   ├── bindings.conf         # Your key bindings
-│   ├── input.conf            # Input device settings
-│   ├── monitors.conf         # Monitor configurations
-│   ├── animations.conf       # Add any file - automatically handled!
-│   ├── windowrules.conf      # No script changes needed!
-│   └── [any_config].conf     # Literally ANY config file works!
+├── omarchy-hyprland-config    # The universal script (v2.0)
+├── configs/                   # YOUR config files go here
+│   ├── hyprland.conf         # Main configuration
+│   ├── bindings.conf         # Key bindings
+│   ├── monitors.conf         # Monitor setup
+│   └── [any_config].conf     # ANY config file works!
 └── README.md                 # This documentation
 ```
 
@@ -84,6 +119,46 @@ DEBUG=1 ./omarchy-hyprland-config --setup
 
 ## 🔄 Workflow Examples
 
+### Recommended: Live Editing with Symlinks (v2.1)
+```bash
+# 1. Initial setup
+./omarchy-hyprland-config --setup
+
+# 2. Enable symlinks (one time)
+./omarchy-hyprland-config --link
+
+# 3. Edit anywhere - changes are instant!
+vim ~/.config/hypr/bindings.conf
+# The file in configs/ is already updated!
+
+# 4. Commit when ready
+git add configs/ && git commit -m "Updated bindings" && git push
+
+# That's it! No manual copying ever needed!
+```
+
+### Alternative: Traditional Copy Method
+
+### Setting Up Your Own Configs
+```bash
+# 1. Clone the script
+git clone https://github.com/peregrinus879/omarchy-hyprland-configurator.git
+cd omarchy-hyprland-configurator
+
+# 2. Remove my configs, add yours
+rm -rf configs/*
+cp ~/.config/hypr/*.conf configs/
+
+# 3. Run setup
+./omarchy-hyprland-config --setup
+
+# 4. (Optional) Push to your own repository
+git add configs/
+git commit -m "Add my personal Hyprland configs"
+git remote set-url origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git push
+```
+
 ### Adding New Configuration Files
 ```bash
 # 1. Add any new config to configs/
@@ -91,30 +166,15 @@ echo "# My custom config" > configs/custom.conf
 
 # 2. Check status - automatically detected!
 ./omarchy-hyprland-config --status
-# Shows: custom.conf: Not installed
 
 # 3. Install it
 ./omarchy-hyprland-config --update
-# Done! No script editing needed!
-```
-
-### Setting Up a New System
-```bash
-# Clone your configs
-git clone https://github.com/YOUR_USERNAME/omarchy-hyprland-configurator.git
-cd omarchy-hyprland-configurator
-
-# One command setup - handles any configs in the directory
-./omarchy-hyprland-config --setup
 ```
 
 ### Managing Multiple Configs
 ```bash
-# Add 10 new config files to configs/
-# Add 50 new config files to configs/
-# Add ANY number of files...
-
-# Script handles them all automatically!
+# Add ANY number of files to configs/
+# The script handles them all automatically!
 ./omarchy-hyprland-config --setup
 ```
 
@@ -199,28 +259,36 @@ DEBUG=1 ./omarchy-hyprland-config --setup
 
 ## 📝 Version History
 
-- **v2.0** (2024-09-22)
+- **v2.1** (2025-09-23)
+  - Added symlink support with `--link` command
+  - Two-way sync with `--sync` command  
+  - Enhanced status display
+  - Improved backup handling for symlinks
+  - Better workflow for daily editing
+
+- **v2.0** (2025-09-22)
   - Complete rewrite with dynamic file discovery
-  - Removed hardcoded file lists
+  - Removed all hardcoded file lists
   - Automatic adaptation to any config structure
   - Enhanced debug output
   - Smart backup/restore system
+  - Zero maintenance design
 
-- **v1.1** (Previous)
-  - Robust error handling
-  - Pre-flight validation
-  - Static file list management
+- **v1.0** (2025-09-18)
+  - Initial release
+  - Basic configuration management
+  - Static file list approach
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Add your configs to `configs/` directory
+2. Replace configs with your own
 3. Test with debug mode: `DEBUG=1 ./omarchy-hyprland-config --setup`
-4. Submit a pull request
+4. Submit improvements to the script (not configs)
 
 ## 📄 License
 
-MIT License - Feel free to use, modify, and distribute.
+MIT License - The script is free to use, modify, and distribute.
 
 ## 💬 Support
 
@@ -230,4 +298,4 @@ MIT License - Feel free to use, modify, and distribute.
 
 ---
 
-**Hyprland configuration management that just works.** No maintenance. No hassle. Just add files and go. 🚀
+**Universal Hyprland configuration management that just works.** Replace configs with yours. No maintenance. No hassle. 🚀

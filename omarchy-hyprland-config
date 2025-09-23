@@ -1,30 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Omarchy Hyprland Configurator v2.0
-# Complete configuration management for Hyprland with dynamic file discovery
+#==============================================================================
+# Omarchy Hyprland Configurator v2.1
+# Complete configuration management for Hyprland with symlink support
 # Repository: https://github.com/peregrinus879/omarchy-hyprland-configurator
+#==============================================================================
 
-# Configuration
+#==============================================================================
+# CONFIGURATION
+#==============================================================================
+readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly CONFIG_DIR="$SCRIPT_DIR/configs"
 readonly TARGET_DIR="$HOME/.config/hypr"
 readonly BACKUP_DIR="$HOME/.config/hypr/backups"
 
-# Colors for output
+# Version Information
+readonly VERSION="2.1"
+readonly VERSION_DATE="2025-09-23"
+
+#==============================================================================
+# COLOR DEFINITIONS
+#==============================================================================
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
 readonly BLUE='\033[0;34m'
 readonly CYAN='\033[0;36m'
+readonly MAGENTA='\033[0;35m'
 readonly BOLD='\033[1m'
 readonly NC='\033[0m'
 
-# Global flags
+#==============================================================================
+# STATE MANAGEMENT
+#==============================================================================
 BACKUP_CREATED=false
 INSTALL_ATTEMPTED=false
 
-# Logging functions
+#==============================================================================
+# LOGGING FUNCTIONS
+#==============================================================================
 log_info() {
   echo -e "${BLUE}[INFO]${NC} $*"
 }
@@ -51,7 +67,27 @@ log_debug() {
   fi
 }
 
-# Dynamic file discovery function
+#==============================================================================
+# ERROR HANDLING
+#==============================================================================
+handle_error() {
+  local exit_code=$?
+  log_error "Script failed with exit code: $exit_code"
+
+  if [[ "$INSTALL_ATTEMPTED" == true && "$BACKUP_CREATED" == true ]]; then
+    log_info "A backup was created before attempting installation"
+    log_info "Use --list-backups and --restore to recover if needed"
+  fi
+
+  exit $exit_code
+}
+
+# Set error trap
+trap handle_error ERR
+
+#==============================================================================
+# DYNAMIC FILE DISCOVERY
+#==============================================================================
 get_config_files() {
   local files=()
 
@@ -62,7 +98,6 @@ get_config_files() {
 
   # Find all files in the configs directory (excluding hidden files and directories)
   while IFS= read -r -d '' file; do
-    # Get just the filename without the path
     local filename
     filename=$(basename "$file")
     files+=("$filename")
@@ -73,7 +108,9 @@ get_config_files() {
   printf '%s\n' "${files[@]}"
 }
 
-# Utility functions
+#==============================================================================
+# UTILITY FUNCTIONS
+#==============================================================================
 check_dependencies() {
   log_debug "Checking for Hyprland..."
   if command -v hyprctl >/dev/null 2>&1; then
@@ -131,7 +168,9 @@ validate_source_files() {
   return 0
 }
 
-# Backup functions
+#==============================================================================
+# BACKUP FUNCTIONS
+#==============================================================================
 backup_existing_configs() {
   log_step "Backing Up Existing Configurations"
 
@@ -154,7 +193,7 @@ backup_existing_configs() {
     local target_file="$TARGET_DIR/$config_file"
     log_debug "Checking target file: $target_file"
 
-    if [[ -f "$target_file" ]]; then
+    if [[ -f "$target_file" || -L "$target_file" ]]; then
       # Create backup subdirectory only when needed
       if [[ $backup_count -eq 0 ]]; then
         if ! mkdir -p "$backup_subdir"; then
@@ -165,12 +204,25 @@ backup_existing_configs() {
       fi
 
       log_info "Backing up: $config_file"
-      if cp "$target_file" "$backup_subdir/"; then
-        ((backup_count++))
-        log_debug "Successfully backed up: $config_file"
+
+      # If it's a symlink, copy the actual file content
+      if [[ -L "$target_file" ]]; then
+        log_debug "Following symlink for backup"
+        if cp -L "$target_file" "$backup_subdir/"; then
+          ((backup_count++))
+          log_debug "Successfully backed up symlinked file: $config_file"
+        else
+          log_error "Failed to backup: $config_file"
+          return 1
+        fi
       else
-        log_error "Failed to backup: $config_file"
-        return 1
+        if cp "$target_file" "$backup_subdir/"; then
+          ((backup_count++))
+          log_debug "Successfully backed up: $config_file"
+        else
+          log_error "Failed to backup: $config_file"
+          return 1
+        fi
       fi
     else
       log_info "No existing file: $config_file (skipping backup)"
@@ -190,158 +242,6 @@ backup_existing_configs() {
   return 0
 }
 
-# Installation functions
-install_configs() {
-  log_step "Installing Hyprland Configurations"
-  INSTALL_ATTEMPTED=true
-
-  # Get dynamic list of config files
-  local config_files
-  mapfile -t config_files < <(get_config_files)
-
-  if [[ ${#config_files[@]} -eq 0 ]]; then
-    log_error "No configuration files found in configs/ directory"
-    return 1
-  fi
-
-  local install_count=0
-
-  log_info "Installing ${#config_files[@]} configuration file(s)..."
-
-  # Install each configuration file
-  for config_file in "${config_files[@]}"; do
-    local source_file="$CONFIG_DIR/$config_file"
-    local target_file="$TARGET_DIR/$config_file"
-
-    log_info "Installing: $config_file"
-    log_debug "Source: $source_file"
-    log_debug "Target: $target_file"
-
-    if cp "$source_file" "$target_file"; then
-      ((install_count++))
-      log_debug "Successfully installed: $config_file"
-    else
-      log_error "Failed to install: $config_file"
-      return 1
-    fi
-  done
-
-  log_success "Installed $install_count configuration file(s)"
-  log_info "Configurations installed to: $TARGET_DIR"
-
-  return 0
-}
-
-# Reload function
-reload_hyprland() {
-  log_step "Reloading Hyprland Configuration"
-
-  if command -v hyprctl >/dev/null 2>&1; then
-    log_debug "hyprctl command found"
-    if hyprctl version >/dev/null 2>&1; then
-      log_info "Reloading Hyprland configuration..."
-      if hyprctl reload >/dev/null 2>&1; then
-        log_success "Hyprland configuration reloaded successfully"
-      else
-        log_warning "Failed to reload Hyprland - configuration may need manual restart"
-        log_info "Try: hyprctl reload (manually)"
-      fi
-    else
-      log_warning "Hyprland not running - configuration ready for next start"
-    fi
-  else
-    log_info "Hyprland not installed - configuration files ready"
-  fi
-}
-
-# Status functions
-show_status() {
-  log_step "Hyprland Configuration Status"
-
-  # Check if Hyprland is available
-  if command -v hyprctl >/dev/null 2>&1; then
-    log_success "Hyprland is installed"
-    local version
-    version=$(hyprctl version 2>/dev/null | head -1 || echo "Unknown version")
-    echo "  Version: $version"
-
-    # Check if running
-    if hyprctl version >/dev/null 2>&1; then
-      log_success "Hyprland is running"
-    else
-      log_info "Hyprland is not currently running"
-    fi
-  else
-    log_warning "Hyprland not found"
-  fi
-
-  echo ""
-  log_info "Configuration files status:"
-
-  # Check if configs directory exists
-  if [[ ! -d "$CONFIG_DIR" ]]; then
-    log_error "configs/ directory not found - run from repository root"
-    return 1
-  fi
-
-  # Get dynamic list of config files
-  local config_files
-  mapfile -t config_files < <(get_config_files)
-
-  if [[ ${#config_files[@]} -eq 0 ]]; then
-    log_warning "No configuration files found in configs/ directory"
-    echo "  Add files to: $CONFIG_DIR"
-    return 0
-  fi
-
-  echo "  Managing ${#config_files[@]} configuration file(s):"
-  echo ""
-
-  for config_file in "${config_files[@]}"; do
-    local source_file="$CONFIG_DIR/$config_file"
-    local target_file="$TARGET_DIR/$config_file"
-
-    echo -n "  $config_file: "
-
-    if [[ ! -f "$source_file" ]]; then
-      echo -e "${RED}Missing source${NC}"
-    elif [[ ! -f "$target_file" ]]; then
-      echo -e "${YELLOW}Not installed${NC}"
-    else
-      # Compare files
-      if cmp -s "$source_file" "$target_file"; then
-        echo -e "${GREEN}✓ Up to date${NC}"
-      else
-        echo -e "${YELLOW}⚠ Different${NC}"
-      fi
-    fi
-  done
-
-  # Show backup information
-  echo ""
-  log_info "Backup information:"
-
-  if [[ -d "$BACKUP_DIR" ]] && [[ -n "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]]; then
-    local backup_count
-    backup_count=$(find "$BACKUP_DIR" -name "backup_*" -type d 2>/dev/null | wc -l)
-    log_success "$backup_count backup(s) available in $BACKUP_DIR"
-
-    # Show most recent backup
-    local latest_backup
-    latest_backup=$(find "$BACKUP_DIR" -name "backup_*" -type d 2>/dev/null | sort | tail -1)
-    if [[ -n "$latest_backup" ]]; then
-      echo "  Latest: $(basename "$latest_backup")"
-      # Show file count in latest backup
-      local file_count
-      file_count=$(find "$latest_backup" -type f 2>/dev/null | wc -l)
-      echo "  Files in latest: $file_count"
-    fi
-  else
-    log_info "No backups found"
-  fi
-}
-
-# Restore functions
 list_backups() {
   log_step "Available Backups"
 
@@ -421,6 +321,12 @@ restore_backup() {
     local target_file="$TARGET_DIR/$config_file"
 
     if [[ -f "$backup_file" ]]; then
+      # Remove symlink if it exists
+      if [[ -L "$target_file" ]]; then
+        log_debug "Removing symlink: $target_file"
+        rm -f "$target_file"
+      fi
+
       log_info "Restoring: $config_file"
       if cp "$backup_file" "$target_file"; then
         ((restore_count++))
@@ -445,23 +351,345 @@ restore_backup() {
   return 0
 }
 
-# Error handling
-handle_error() {
-  local exit_code=$?
-  log_error "Script failed with exit code: $exit_code"
+#==============================================================================
+# INSTALLATION FUNCTIONS
+#==============================================================================
+install_configs() {
+  log_step "Installing Hyprland Configurations"
+  INSTALL_ATTEMPTED=true
 
-  if [[ "$INSTALL_ATTEMPTED" == true && "$BACKUP_CREATED" == true ]]; then
-    log_info "A backup was created before attempting installation"
-    log_info "Use --list-backups and --restore to recover if needed"
+  # Get dynamic list of config files
+  local config_files
+  mapfile -t config_files < <(get_config_files)
+
+  if [[ ${#config_files[@]} -eq 0 ]]; then
+    log_error "No configuration files found in configs/ directory"
+    return 1
   fi
 
-  exit $exit_code
+  local install_count=0
+
+  log_info "Installing ${#config_files[@]} configuration file(s)..."
+
+  # Install each configuration file
+  for config_file in "${config_files[@]}"; do
+    local source_file="$CONFIG_DIR/$config_file"
+    local target_file="$TARGET_DIR/$config_file"
+
+    log_info "Installing: $config_file"
+    log_debug "Source: $source_file"
+    log_debug "Target: $target_file"
+
+    # Remove symlink if it exists
+    if [[ -L "$target_file" ]]; then
+      log_debug "Removing existing symlink: $target_file"
+      rm -f "$target_file"
+    fi
+
+    if cp "$source_file" "$target_file"; then
+      ((install_count++))
+      log_debug "Successfully installed: $config_file"
+    else
+      log_error "Failed to install: $config_file"
+      return 1
+    fi
+  done
+
+  log_success "Installed $install_count configuration file(s)"
+  log_info "Configurations installed to: $TARGET_DIR"
+
+  return 0
 }
 
-# Trap errors
-trap handle_error ERR
+link_configs() {
+  log_step "Creating Symlinks for Hyprland Configurations"
 
-# Main command implementations
+  # Get dynamic list of config files
+  local config_files
+  mapfile -t config_files < <(get_config_files)
+
+  if [[ ${#config_files[@]} -eq 0 ]]; then
+    log_error "No configuration files found in configs/ directory"
+    return 1
+  fi
+
+  local link_count=0
+
+  log_info "Creating symlinks for ${#config_files[@]} configuration file(s)..."
+
+  # Create symlink for each configuration file
+  for config_file in "${config_files[@]}"; do
+    local source_file="$CONFIG_DIR/$config_file"
+    local target_file="$TARGET_DIR/$config_file"
+
+    # Get absolute path for source
+    local abs_source
+    abs_source=$(realpath "$source_file")
+
+    log_info "Linking: $config_file"
+    log_debug "Source: $abs_source"
+    log_debug "Target: $target_file"
+
+    # Remove existing file/link if present
+    if [[ -e "$target_file" || -L "$target_file" ]]; then
+      log_debug "Removing existing: $target_file"
+      rm -f "$target_file"
+    fi
+
+    if ln -s "$abs_source" "$target_file"; then
+      ((link_count++))
+      log_debug "Successfully linked: $config_file"
+    else
+      log_error "Failed to link: $config_file"
+      return 1
+    fi
+  done
+
+  log_success "Created $link_count symlink(s)"
+  log_info "Configurations linked to: $TARGET_DIR"
+  echo ""
+  log_info "${BOLD}${GREEN}You can now edit configs in either location!${NC}"
+  echo "  • System: ~/.config/hypr/"
+  echo "  • Repository: $CONFIG_DIR/"
+  echo ""
+  log_info "Changes are immediately reflected in both locations"
+
+  return 0
+}
+
+sync_configs() {
+  log_step "Syncing Configurations"
+
+  # Get dynamic list of config files
+  local config_files
+  mapfile -t config_files < <(get_config_files)
+
+  if [[ ${#config_files[@]} -eq 0 ]]; then
+    log_error "No configuration files found in configs/ directory"
+    return 1
+  fi
+
+  echo ""
+  log_info "Choose sync direction:"
+  echo "  1) Repository → System (push changes to system)"
+  echo "  2) System → Repository (pull changes from system)"
+  echo "  3) Show differences only"
+  echo ""
+  read -p "Choice [1-3]: " choice
+
+  case "$choice" in
+  1)
+    log_info "Pushing changes to system..."
+    install_configs
+    ;;
+  2)
+    log_info "Pulling changes from system..."
+    local pull_count=0
+    for config_file in "${config_files[@]}"; do
+      local source_file="$CONFIG_DIR/$config_file"
+      local target_file="$TARGET_DIR/$config_file"
+
+      if [[ -f "$target_file" || -L "$target_file" ]]; then
+        log_info "Pulling: $config_file"
+
+        # If target is a symlink, skip (already synced)
+        if [[ -L "$target_file" ]]; then
+          log_debug "Skipping symlink: $config_file"
+          continue
+        fi
+
+        if cp "$target_file" "$source_file"; then
+          ((pull_count++))
+        else
+          log_error "Failed to pull: $config_file"
+          return 1
+        fi
+      else
+        log_warning "System file not found: $config_file"
+      fi
+    done
+    if [[ $pull_count -gt 0 ]]; then
+      log_success "Pulled $pull_count file(s) from system"
+    else
+      log_info "No files to pull (may be using symlinks)"
+    fi
+    ;;
+  3)
+    log_info "Showing differences..."
+    local has_diff=false
+    for config_file in "${config_files[@]}"; do
+      local source_file="$CONFIG_DIR/$config_file"
+      local target_file="$TARGET_DIR/$config_file"
+
+      if [[ -L "$target_file" ]]; then
+        log_success "$config_file is symlinked (always synchronized)"
+      elif [[ -f "$target_file" ]]; then
+        if ! cmp -s "$source_file" "$target_file"; then
+          has_diff=true
+          echo ""
+          log_warning "Differences in: $config_file"
+          diff --color=auto -u "$target_file" "$source_file" || true
+        else
+          log_success "$config_file is synchronized"
+        fi
+      else
+        log_warning "$config_file not installed on system"
+      fi
+    done
+
+    if [[ "$has_diff" == false ]]; then
+      echo ""
+      log_success "All files are synchronized!"
+    fi
+    ;;
+  *)
+    log_error "Invalid choice"
+    return 1
+    ;;
+  esac
+}
+
+reload_hyprland() {
+  log_step "Reloading Hyprland Configuration"
+
+  if command -v hyprctl >/dev/null 2>&1; then
+    log_debug "hyprctl command found"
+    if hyprctl version >/dev/null 2>&1; then
+      log_info "Reloading Hyprland configuration..."
+      if hyprctl reload >/dev/null 2>&1; then
+        log_success "Hyprland configuration reloaded successfully"
+      else
+        log_warning "Failed to reload Hyprland - configuration may need manual restart"
+        log_info "Try: hyprctl reload (manually)"
+      fi
+    else
+      log_warning "Hyprland not running - configuration ready for next start"
+    fi
+  else
+    log_info "Hyprland not installed - configuration files ready"
+  fi
+}
+
+#==============================================================================
+# STATUS FUNCTIONS
+#==============================================================================
+show_status() {
+  log_step "Hyprland Configuration Status"
+
+  # Check if Hyprland is available
+  if command -v hyprctl >/dev/null 2>&1; then
+    log_success "Hyprland is installed"
+    local version
+    version=$(hyprctl version 2>/dev/null | head -1 || echo "Unknown version")
+    echo "  Version: $version"
+
+    # Check if running
+    if hyprctl version >/dev/null 2>&1; then
+      log_success "Hyprland is running"
+    else
+      log_info "Hyprland is not currently running"
+    fi
+  else
+    log_warning "Hyprland not found"
+  fi
+
+  echo ""
+  log_info "Configuration files status:"
+
+  # Check if configs directory exists
+  if [[ ! -d "$CONFIG_DIR" ]]; then
+    log_error "configs/ directory not found - run from repository root"
+    return 1
+  fi
+
+  # Get dynamic list of config files
+  local config_files
+  mapfile -t config_files < <(get_config_files)
+
+  if [[ ${#config_files[@]} -eq 0 ]]; then
+    log_warning "No configuration files found in configs/ directory"
+    echo "  Add files to: $CONFIG_DIR"
+    return 0
+  fi
+
+  echo "  Managing ${#config_files[@]} configuration file(s):"
+  echo ""
+
+  local symlink_count=0
+  local copy_count=0
+  local missing_count=0
+
+  for config_file in "${config_files[@]}"; do
+    local source_file="$CONFIG_DIR/$config_file"
+    local target_file="$TARGET_DIR/$config_file"
+
+    echo -n "  $config_file: "
+
+    if [[ ! -f "$source_file" ]]; then
+      echo -e "${RED}Missing source${NC}"
+    elif [[ -L "$target_file" ]]; then
+      # It's a symlink
+      local link_target
+      link_target=$(readlink "$target_file")
+      if [[ "$link_target" == "$(realpath "$source_file")" ]]; then
+        echo -e "${CYAN}↔ Symlinked${NC}"
+        ((symlink_count++))
+      else
+        echo -e "${YELLOW}⚠ Symlinked (different target)${NC}"
+      fi
+    elif [[ -f "$target_file" ]]; then
+      # Regular file - compare contents
+      if cmp -s "$source_file" "$target_file"; then
+        echo -e "${GREEN}✓ Up to date${NC}"
+        ((copy_count++))
+      else
+        echo -e "${YELLOW}⚠ Different${NC}"
+      fi
+    else
+      echo -e "${YELLOW}Not installed${NC}"
+      ((missing_count++))
+    fi
+  done
+
+  # Show summary
+  echo ""
+  if [[ $symlink_count -gt 0 ]]; then
+    log_info "${CYAN}Symlinked files: $symlink_count${NC} (live sync enabled)"
+  fi
+  if [[ $copy_count -gt 0 ]]; then
+    log_info "Copied files: $copy_count"
+  fi
+  if [[ $missing_count -gt 0 ]]; then
+    log_warning "Missing files: $missing_count"
+  fi
+
+  # Show backup information
+  echo ""
+  log_info "Backup information:"
+
+  if [[ -d "$BACKUP_DIR" ]] && [[ -n "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]]; then
+    local backup_count
+    backup_count=$(find "$BACKUP_DIR" -name "backup_*" -type d 2>/dev/null | wc -l)
+    log_success "$backup_count backup(s) available in $BACKUP_DIR"
+
+    # Show most recent backup
+    local latest_backup
+    latest_backup=$(find "$BACKUP_DIR" -name "backup_*" -type d 2>/dev/null | sort | tail -1)
+    if [[ -n "$latest_backup" ]]; then
+      echo "  Latest: $(basename "$latest_backup")"
+      # Show file count in latest backup
+      local file_count
+      file_count=$(find "$latest_backup" -type f 2>/dev/null | wc -l)
+      echo "  Files in latest: $file_count"
+    fi
+  else
+    log_info "No backups found"
+  fi
+}
+
+#==============================================================================
+# COMMAND IMPLEMENTATIONS
+#==============================================================================
 cmd_setup() {
   log_step "Setting Up Omarchy Hyprland Configurations"
 
@@ -497,7 +725,10 @@ cmd_setup() {
   log_success "Setup complete!"
   echo ""
   log_info "Your Hyprland configurations have been installed"
-  log_info "Use '$0 --status' to verify installation"
+  log_info "Use '$SCRIPT_NAME --status' to verify installation"
+
+  echo ""
+  log_info "${MAGENTA}TIP:${NC} Use '$SCRIPT_NAME --link' for live editing with symlinks!"
 
   return 0
 }
@@ -535,7 +766,7 @@ cmd_restore() {
   if [[ -z "$backup_name" ]]; then
     log_error "Backup name required"
     echo ""
-    echo "Usage: $0 --restore <backup_name>"
+    echo "Usage: $SCRIPT_NAME --restore <backup_name>"
     echo ""
     cmd_list_backups
     return 1
@@ -578,12 +809,122 @@ cmd_update() {
   cmd_setup
 }
 
+cmd_link() {
+  log_step "Setting Up Symlinks for Live Editing"
+
+  log_warning "This will create symlinks from your system to the repository"
+  log_info "Any changes made will immediately affect both locations"
+  echo ""
+
+  echo "Benefits of symlinks:"
+  echo "  • Edit configs anywhere - changes are instant"
+  echo "  • No need to copy files back and forth"
+  echo "  • Git always has latest changes"
+  echo "  • Perfect for frequent config editing"
+  echo ""
+
+  read -p "Continue? (y/N): " confirm
+
+  if [[ ! $confirm =~ ^[Yy]$ ]]; then
+    log_info "Link operation cancelled"
+    return 0
+  fi
+
+  # Pre-flight checks
+  if ! validate_source_files; then
+    log_error "Pre-flight validation failed"
+    return 1
+  fi
+
+  if ! ensure_directories; then
+    log_error "Failed to create necessary directories"
+    return 1
+  fi
+
+  # Backup existing configs before linking
+  if ! backup_existing_configs; then
+    log_error "Backup failed - aborting to prevent data loss"
+    return 1
+  fi
+
+  # Create symlinks
+  if ! link_configs; then
+    log_error "Linking failed"
+    return 1
+  fi
+
+  # Reload Hyprland
+  reload_hyprland
+
+  log_success "Symlink setup complete!"
+  echo ""
+  log_info "You can now edit configs in either location:"
+  echo "  • vim ~/.config/hypr/any_config.conf"
+  echo "  • vim $CONFIG_DIR/any_config.conf"
+  echo ""
+  log_info "Both edit the SAME file - already in your git repository!"
+
+  return 0
+}
+
+cmd_sync() {
+  sync_configs
+}
+
+cmd_unlink() {
+  log_step "Removing Symlinks and Restoring Copies"
+
+  # Get dynamic list of config files
+  local config_files
+  mapfile -t config_files < <(get_config_files)
+
+  if [[ ${#config_files[@]} -eq 0 ]]; then
+    log_error "No configuration files found"
+    return 1
+  fi
+
+  local unlink_count=0
+  for config_file in "${config_files[@]}"; do
+    local target_file="$TARGET_DIR/$config_file"
+    local source_file="$CONFIG_DIR/$config_file"
+
+    if [[ -L "$target_file" ]]; then
+      log_info "Unlinking: $config_file"
+      rm -f "$target_file"
+
+      # Copy the actual file back
+      if [[ -f "$source_file" ]]; then
+        if cp "$source_file" "$target_file"; then
+          ((unlink_count++))
+          log_debug "Replaced link with copy: $config_file"
+        else
+          log_error "Failed to copy: $config_file"
+        fi
+      fi
+    else
+      log_debug "$config_file is not a symlink"
+    fi
+  done
+
+  if [[ $unlink_count -gt 0 ]]; then
+    log_success "Unlinked and restored $unlink_count file(s)"
+    log_info "Files are now separate copies (no longer linked)"
+  else
+    log_info "No symlinks found to remove"
+  fi
+
+  return 0
+}
+
+#==============================================================================
+# HELP FUNCTION
+#==============================================================================
 show_usage() {
-  echo -e "${BOLD}Omarchy Hyprland Configurator v2.0${NC}"
-  echo "Complete configuration management for Hyprland with dynamic file discovery"
+  echo -e "${BOLD}Omarchy Hyprland Configurator v${VERSION}${NC}"
+  echo "Complete configuration management for Hyprland with symlink support"
   echo ""
   echo -e "${BOLD}USAGE:${NC}"
-  echo "  $0 [COMMAND]"
+  echo "  $SCRIPT_NAME [COMMAND]"
   echo ""
   echo -e "${BOLD}SETUP:${NC}"
   echo "  --setup           Complete setup (recommended)"
@@ -596,18 +937,26 @@ show_usage() {
   echo "  --list-backups    List available backups"
   echo "  --restore <name>  Restore from backup"
   echo ""
+  echo -e "${BOLD}ADVANCED:${NC}"
+  echo "  --link            Create symlinks for live editing ${GREEN}(recommended!)${NC}"
+  echo "  --unlink          Remove symlinks, restore copies"
+  echo "  --sync            Two-way sync between repo and system"
+  echo ""
   echo -e "${BOLD}HELP:${NC}"
   echo "  --help            Show this help message"
+  echo "  --version         Show version information"
   echo ""
   echo -e "${BOLD}EXAMPLES:${NC}"
-  echo "  $0 --setup                      # Complete setup"
-  echo "  $0 --status                     # Check status"
-  echo "  $0 --restore backup_20241218_143022  # Restore specific backup"
+  echo "  $SCRIPT_NAME --setup                      # Initial setup"
+  echo "  $SCRIPT_NAME --link                       # Enable live editing"
+  echo "  $SCRIPT_NAME --status                     # Check status"
+  echo "  $SCRIPT_NAME --restore backup_20241218_143022  # Restore backup"
   echo ""
-  echo -e "${BOLD}DYNAMIC FILE MANAGEMENT:${NC}"
-  echo "  • Automatically discovers all files in configs/ directory"
-  echo "  • No script modification needed when adding new config files"
-  echo "  • Simply add files to configs/ and run --setup or --update"
+  echo -e "${BOLD}RECOMMENDED WORKFLOW:${NC}"
+  echo "  1. Run --setup once to install configs"
+  echo "  2. Run --link to enable live editing with symlinks"
+  echo "  3. Edit configs anywhere - changes are instant!"
+  echo "  4. Commit and push to git when ready"
   echo ""
   echo -e "${BOLD}CONFIGURATION DIRECTORY:${NC}"
   echo "  Source: $CONFIG_DIR"
@@ -628,15 +977,24 @@ show_usage() {
   fi
 
   echo -e "${BOLD}DEBUG:${NC}"
-  echo "  DEBUG=1 $0 --setup              # Run with debug output"
+  echo "  DEBUG=1 $SCRIPT_NAME --setup              # Run with debug output"
 }
 
-# Main function
+show_version() {
+  echo "Omarchy Hyprland Configurator"
+  echo "Version: $VERSION"
+  echo "Released: $VERSION_DATE"
+  echo "Repository: https://github.com/peregrinus879/omarchy-hyprland-configurator"
+}
+
+#==============================================================================
+# MAIN FUNCTION
+#==============================================================================
 main() {
   # Enable debug mode if requested
   if [[ "${DEBUG:-}" == "1" ]]; then
     log_debug "Debug mode enabled"
-    log_debug "Script version: 2.0"
+    log_debug "Script version: $VERSION"
     log_debug "Config directory: $CONFIG_DIR"
     log_debug "Target directory: $TARGET_DIR"
     set -x
@@ -658,8 +1016,20 @@ main() {
   --restore)
     cmd_restore "${2:-}"
     ;;
+  --link)
+    cmd_link
+    ;;
+  --unlink)
+    cmd_unlink
+    ;;
+  --sync)
+    cmd_sync
+    ;;
   --update)
     cmd_update
+    ;;
+  --version)
+    show_version
     ;;
   --help | -h | "")
     show_usage
@@ -673,5 +1043,7 @@ main() {
   esac
 }
 
-# Execute main function
+#==============================================================================
+# ENTRY POINT
+#==============================================================================
 main "$@"
